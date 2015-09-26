@@ -1,0 +1,5 @@
+recursive-include test *.*
+recursive-include sslh *.*
+recursive-exclude test_debug *.*
+global-exclude *.pyc *.pdf .DS_Store
+include LICENSE.txt MANIFEST.in README.rst requirements.txt setup.cfg setup.py

@@ -1,0 +1,7 @@
+numpy>=1.9.1
+scipy>=0.15.1
+matplotlib>=1.4.2
+psycopg2>=2.5.4
+pyamg>=2.2.1
+sklearn
+pytest>=2.8.0
