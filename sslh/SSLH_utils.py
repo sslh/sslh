@@ -10,6 +10,7 @@ Nomenclature:
 First version: Dec 6, 2014
 This version: Sept 21, 2015
 Author: Wolfgang Gatterbauer <gatt@cmu.edu>
+This is a test for pull requests
 """
 
 
