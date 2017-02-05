@@ -1,22 +1,22 @@
 """
-File manipulation for SSL-H: Loads from and saves to csv formats.
+File manipulation for SSL-H: Loads from and saves to csv formats with comma ',' delimiter.
 Nomenclature: W, X, H[j,i], n, l, k, Xd, Xr (relational)
 
-First version: Dec 6, 2014
-This version: Sept 16, 2015
-Author: Wolfgang Gatterbauer <gatt@cmu.edu>
+(C) Wolfgang Gatterbauer, 2016
 """
 
 
 import numpy as np
+import pandas as pd
 from scipy.sparse import csr_matrix
 import csv
+import warnings
 
 
-def load_W(fileName, skiprows=1, zeroindexing=True, n=None, delimiter=',', usefloat=False, doubleUndirected=False):
+def load_W(fileName, skiprows=1, zeroindexing=True, n=None, doubleUndirected=False):
     """Reads a weighted adjacency matrix W from CSV and returns it as sparse CSR matrix W together with n.
     CSV input format: 2 or 3 columns: row, col (, weight): weight is optional.
-    Returns None, None if the file does not exist (instead of throwing an error).
+    [Deprecated: Returns None, None if the file does not exist (instead of throwing an error).]
 
     Parameters
     ----------
@@ -28,48 +28,39 @@ def load_W(fileName, skiprows=1, zeroindexing=True, n=None, delimiter=',', usefl
         whether first node is indexed by 0 (instead of by 1)
     n : int, optional (Default=0)
         number of different nodes
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or None (uses whitespace)
-    usefloat : bool, optional (default=False)
-        whether to use float instead of int for saving weights
-        If not set, then weight is assumed to integer.
     doubleUndirected : bool, optional (default=False)
         whether to add for each edge, also a back edge
-        If edge is already present, then doubles adds the weights
+        If edge is already present, then doubles the weights
 
     Returns
     -------
     W : [n x n] sparse matrix: scipy.sparse.csr.csr_matrix
         weighted adjacency matrix in sparse format
-        None in case the file does not exist
     n : int
         number of nodes
-        None in case the file does not exist
 
     Assumes
     -------
     Assumes node labels 0-(n-1) [or 1-n for zeroindexing=False]
     If n is not specified, then the code taks n-1 = maximum integer in rows or columns (or n for "zeroindexing=False")
-    File name does not matter. Even GZ is possible.
     Node ids need to be integers. Integers can start at 0 or 1 ("zeroindexing=True" or False).
-    Weight is assumed integer. Otherwise float if "usefloat=True".
     """
     try:
-        if usefloat:
-            data = np.loadtxt(fileName, dtype=float, delimiter=delimiter, skiprows=skiprows)
-        else:    # if dtype not specified, then float by default
-            data = np.loadtxt(fileName, dtype=int, delimiter=delimiter, skiprows=skiprows)
-        k, m = np.shape(data.T)
+        data = pd.read_csv(fileName, delimiter=',', skiprows=skiprows, header=None)
+
+        m, k = data.shape
         assert k == 2 or k == 3                     # only accept 2 or 3 columns
-        if k == 3:
-            row, col, weight = data.T
-        else:                                       # in case it only has 2 columns, then the weights are all 1s
-            row, col = data.T
-            weight = [1] * m                        # create the weight array so code later is the same
+        row = data.iloc[:, 0].values
+        col = data.iloc[:, 1].values
+        if k== 3:
+            weight = data.iloc[:, 2].values
+        else:  # in case it only has 2 columns, then the weights are all 1s
+            weight = [1] * m  # create the weight array so code later is the same
 
         if not zeroindexing:                        # transform from 1-indexing to 0-indexing
             row -= 1
             col -= 1
+
         if n is None:
             n = max(np.max(row),np.max(col))        # assumes the last node appears (= has at least one edge)
             n += 1                                  # assumes zeroindexing
@@ -82,15 +73,14 @@ def load_W(fileName, skiprows=1, zeroindexing=True, n=None, delimiter=',', usefl
         W = csr_matrix((weight, (row, col)), shape=(n, n))
         return W, n
     except IOError as error:
-        # print("Error: {0:s}: could not be opened: {1:s}".format(fileName, error.strerror))
         raise error
-        # return None, None
 
 
-def save_W(fileName, W, delimiter=',', saveWeights=False):
+def save_W(fileName, W, saveWeights=False):
     """Saves a sparse weighted adjacency matrix in CSV sparse format
     Includes a header and uses zero indexing.
     Deals with both integers and floats as weights.
+    [Deprecated: delimiter=',']
 
     Parameters
     ----------
@@ -98,22 +88,25 @@ def save_W(fileName, W, delimiter=',', saveWeights=False):
         fileName including path
     W : [n x n] sparse matrix: scipy.sparse.csr.csr_matrix
         weighted adjacency matrix in sparse format
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or ' ' (not None!)
+    saveWeights: Boolean  (Default = False)
+        saves weights as 3rd column, otherwise just 2 columns
     """
     row, col = W.nonzero()
     weight = W.data
+
     if not saveWeights:
-        data = np.array(zip(row, col))
-        np.savetxt(fileName, data, fmt='%g', delimiter=delimiter, header='source,destination')
+        d = np.array([row, col]).transpose()
+        df = pd.DataFrame(d, columns=['source', 'destination'])             # order 'source' -> 'destination' needs to be specified, otherwise alphabetically
     else:
-        data = np.array(zip(row, col, weight))
-        np.savetxt(fileName, data, fmt='%g', delimiter=delimiter, header='source,destination,weight')
+        d = np.array([row, col, weight]).transpose()
+        df = pd.DataFrame(d, columns=['source', 'destination', 'weight'])
+
+    df.to_csv(fileName, sep=',', index=False)
 
 
-def load_X(fileName, n=None, k=None, skiprows=1, zeroindexing=True, delimiter=','):
+def load_X(fileName, n=None, k=None, skiprows=1, zeroindexing=True):
     """Reads a belief matrix Xr from CSV in relational format (node, label, belief)
-    Returns a dense [n x k] matrix X, together with n and k
+    Returns a tuple: a dense [n x k] matrix X, together with n and k
     Returns None, None if the file does not exist
     CSV input format: 2 or 3 columns: node, label (, belief): belief is optional and otherwise assume = 1
     node indexes are integers starting at 0 or 1
@@ -130,8 +123,6 @@ def load_X(fileName, n=None, k=None, skiprows=1, zeroindexing=True, delimiter=',
         number of top rows to skip
     zeroindexing : bool, optional (default=True)
         whether first node is indexed by 0 [instead of by 1]
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or None (uses whitespace)
 
     Returns
     -------
@@ -151,14 +142,15 @@ def load_X(fileName, n=None, k=None, skiprows=1, zeroindexing=True, delimiter=',
     assumes label (k-1) [or k for zeroindexing=False] is assigned to at least one node, if k is not explicitly specified
     """
     try:
-        data = np.loadtxt(fileName, delimiter=delimiter, skiprows=skiprows)     # does float by default
-        num_col, m = np.shape(data.T)
+        data = pd.read_csv(fileName, delimiter=',', skiprows=skiprows, header=None)
 
-        assert num_col == 2 or num_col == 3, "The data file can contain only 2 or 3 columns"
+        m, num_col = data.shape
+        assert num_col == 2 or num_col == 3                     # only accept 2 or 3 columns
+        node = data.iloc[:, 0].values
+        label = data.iloc[:, 1].values
         if num_col == 3:
-            node, label, belief = data.T
-        else:                       # in case it only has 2 columns, then the weights are all 1s
-            node, label = data.T
+            belief = data.iloc[:, 2].values
+        else:  # in case it only has 2 columns, then each class can only have one belief
             assert len(set(node)) == len(node), "With 2 input columns, every node can be assigned to maximal one class"
             belief = [1] * m        # create the weight array so code later is the same
 
@@ -180,7 +172,7 @@ def load_X(fileName, n=None, k=None, skiprows=1, zeroindexing=True, delimiter=',
         return None, None, None
 
 
-def save_X(fileName, X, delimiter=','):
+def save_X(fileName, X):
     """Saves a dense explicit belief matrix X to CSV
     Includes a header and uses zero indexing
 
@@ -190,146 +182,32 @@ def save_X(fileName, X, delimiter=','):
         fileName including path
     X : dense matrix
         explicit belief matrix
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or ' ' (not None!)
     """
     n, k = X.shape
-    z = [(i, j, X[i,j]) for i in range(n) for j in range(k) if X[i, j] != 0]     # only save entries that are not 0
-    data = np.array(z)
-    np.savetxt(fileName, data, fmt='%g', delimiter=delimiter, header='node,class,belief')
+
+    X2 = csr_matrix(X)              # fast way to get X matrix into row / col / weight format
+    row, col = X2.nonzero()
+    weight = X2.data
+    data = np.array([row, col, weight]).transpose()
+
+    df = pd.DataFrame(data, columns=['node', 'class', 'belief'])
+    df['node'] = df['node'].astype(int)     # Force node and class datatype workaround (https://github.com/pandas-dev/pandas/issues/9287)
+    df['class'] = df['class'].astype(int)
+    df.to_csv(fileName, sep=',', index=False)
 
 
-def load_Xd(fileName, skiprows=1, delimiter=','):
-    """Loads a dictionary node id -> class id
-    CSV input format: node id, class id.
 
-    Parameters
-    ----------
-    fileName : string
-        fileName including path
-    skiprows : int, optional (Default=1)
-        number of top rows to skip
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or None (uses whitespace)
-    Returns
-    -------
-    Xd : dictionary
-        maps node ids to class ids
-    """
-    try:
-        data = np.loadtxt(fileName, dtype=int, delimiter=delimiter, skiprows=skiprows)
-        '''if dtype not specified, then float by default'''
-        k, _ = np.shape(data.T)
-        assert k == 2       # only accept dictionary
-        keys, values = data.T
-        Xd = {k: v for k,v in zip(keys,values)}
-        return Xd
-    except IOError as error:
-        return None, None, None
-
-
-def save_Xd(fileName, Xd, delimiter=','):
-    """Saves a dictionary node id -> class id
-
-    Parameters
-    ----------
-    fileName : string
-        fileName including path
-    Xd : dictionary
-        maps node ids to class ids
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or ' ' (not None!)
-    """
-    z = [(k,v) for k,v in Xd.items()]
-    data = np.array(z)
-    np.savetxt(fileName, data, fmt='%g', delimiter=delimiter, header='node,class')
-
-
-def load_H(fileName, l=None, k=None, skiprows=1, zeroindexing=True, delimiter=','):
-    """Reads a [l x k] directed potential or coupling matrix H and returns a dense [l x k] numpy array H, together with l and k
-    Returns None, None, None if the file does not exist
-    CSV input format for H(j,i): j, i, weight (from, to, weight)
-
-    Parameters
-    ----------
-    fileName : string
-        fileName including path
-    l : int, optional (Default=None)
-        number of different classes (vertical = rows)
-    k : int, optional (Default=None)
-        number of different classes (horizontal = columns)
-    skiprows : int, optional (Default=1)
-        number of top rows to skip
-    zeroindexing : bool, optional (default=True)
-        whether first node is indexed by 0 [instead of by 1]
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or None (uses whitespace)
-
-    Returns
-    -------
-    H : dense [l x k] numpy array
-        None in case the file does not exist
-    l : int
-        number of classes (vertical = rows)
-        None in case the file does not exist
-    k : int
-        number of classes (horizontal = columns)
-        None in case the file does not exist
-
-    Assumes
-    -------
-    Assumes class labels 0-(k-1) [or 1-k for zeroindexing=False]
-    Assumes class (k-1) [or k for zeroindexing=False] must be mentioned, if k is not explicitly specified
-    """
-    try:
-        data = np.loadtxt(fileName, delimiter=delimiter, skiprows=skiprows)
-        row, col, weight = data.T
-        if not zeroindexing:        # transform from 1 to 0 indexing
-            row -= 1
-            col -= 1
-        if l is None:
-            l = np.max(row)         # assumes that last class is mentioned
-            l += 1                  # assumes zeroindexing
-        if k is None:
-            k = np.max(col)         # assumes that last class is mentioned
-            k += 1                  # assumes zeroindexing
-        Hs = csr_matrix((weight, (row, col)), shape=(l, k))
-        H = np.array(Hs.todense())  # todense would create a matrix object, but we use arrays
-        return H, l, k
-    except IOError as error:
-        return None, None, None
-
-
-def save_H(fileName, H, delimiter=','):
-    """Saves a dense [l x k] coupling matrix H to CSV
-    CSV format for H(j,i): j, i, weight (from, to, weight)
-    Includes a header and uses zero indexing
-
-    Parameters
-    ----------
-    fileName : string
-        fileName including path
-    H : dense matrix
-        coupling matrix
-    delimiter : string, optional  (Default = ',')
-        CSV delimiter: ',' or or '\t' or ' ' (not None!)
-    """
-    l, k = H.shape
-    z = [(j, i, H[j, i]) for j in range(l) for i in range(k)]
-    data = np.array(z)
-    np.savetxt(fileName, data, fmt='%g', delimiter=delimiter, header='from,to,weight')
-
-
-def save_csv_records(fileName, records, header_row=None):
-    """Given a filename and records (= list of tuples, e.g. from a database query), writes the records to a CSV file
-    Overwrites the content of an existing file.
-    Optionally takes a header as argument for first row"""
-    with open(fileName, 'w') as f:           # 'w' overwrite, 'a' append
-        writer = csv.writer(f, delimiter=',')
-        if header_row is not None:
-            writer.writerow(header_row)
-        for row in records:
-            writer.writerow(row)
+def save_csv_record(fileName, record, append=True):
+    """Given a filename and record (= one tuple or list), writes the record to a CSV file
+    By default appends to existing file"""
+    if append:
+        with open(fileName, 'a') as f:      # 'a' append
+            writer = csv.writer(f, delimiter=',')
+            writer.writerow(record)
+    else:
+        with open(fileName, 'w') as f:      # 'w' overwrite
+            writer = csv.writer(f, delimiter=',')
+            writer.writerow(record)
 
 
 def load_csv_records(fileName):
