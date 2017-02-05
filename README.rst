@@ -103,3 +103,8 @@ Version 0.1.0
 
 -  **Initial Release**: Main method 'linBP_undirected' for linearized belief propagation with one single doubly stochastic and symmetric potential as described in "Linearized and Single-pass Belief Propagation"
 
+Version 0.2.0
+-------------
+
+-  Linearized BP for networks with one single aribtrary potentials as described in "Linearization for Pairwise MRFs."
+
